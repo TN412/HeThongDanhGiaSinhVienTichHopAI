@@ -1,0 +1,350 @@
+name: CI/CD Pipeline
+
+# Trigger workflow on push to main or pull requests
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch: # Allow manual trigger
+
+# Environment variables shared across jobs
+env:
+  NODE_VERSION: "20.x"
+  MONGODB_URI: ${{ secrets.MONGODB_URI }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  JWT_SECRET: ${{ secrets.JWT_SECRET }}
+  AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+  FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+  APPINSIGHTS_INSTRUMENTATIONKEY: ${{ secrets.APPINSIGHTS_INSTRUMENTATIONKEY }}
+
+jobs:
+  # ========================================
+  # Job 1: Build and Test Backend
+  # ========================================
+  backend-build-test:
+    name: 🔨 Backend Build & Test
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: "./backend/package-lock.json"
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Run ESLint
+        run: npm run lint
+        continue-on-error: true # Don't fail build on lint warnings
+
+      - name: 🧪 Run backend tests
+        run: npm test
+        env:
+          NODE_ENV: test
+          MONGODB_URI: ${{ secrets.MONGODB_URI_TEST }} # Use test DB if available
+          JWT_SECRET: test-jwt-secret-for-ci
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: 📊 Upload backend test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: backend/coverage/
+          retention-days: 7
+
+      - name: 📦 Create backend artifact
+        run: |
+          mkdir -p ../artifacts/backend
+          cp -r . ../artifacts/backend/
+          cd ../artifacts
+          tar -czf backend-build.tar.gz backend/
+
+      - name: 📤 Upload backend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: artifacts/backend-build.tar.gz
+          retention-days: 1
+
+  # ========================================
+  # Job 2: Build and Test Frontend
+  # ========================================
+  frontend-build-test:
+    name: 🎨 Frontend Build & Test
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: "./frontend/package-lock.json"
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Run ESLint
+        run: npm run lint
+        continue-on-error: true
+
+      - name: 🧪 Run frontend tests
+        run: npm test
+        env:
+          NODE_ENV: test
+
+      - name: 📊 Upload frontend test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test-results
+          path: frontend/coverage/
+          retention-days: 7
+
+      - name: 🏗️ Build frontend for production
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://your-backend.azurewebsites.net/api' }}
+
+      - name: 📤 Upload frontend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist/
+          retention-days: 1
+
+  # ========================================
+  # Job 3: Deploy Backend to Azure App Service
+  # ========================================
+  deploy-backend:
+    name: 🚀 Deploy Backend to Azure
+    runs-on: ubuntu-latest
+    needs: [backend-build-test, frontend-build-test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    environment:
+      name: production-backend
+      url: ${{ steps.deploy-backend.outputs.webapp-url }}
+
+    steps:
+      - name: 📥 Download backend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build
+
+      - name: 📦 Extract backend build
+        run: |
+          tar -xzf backend-build.tar.gz
+          cd backend
+          # Remove dev dependencies and test files
+          rm -rf node_modules coverage tests
+          npm ci --omit=dev
+
+      - name: 🚀 Deploy to Azure App Service
+        id: deploy-backend
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_BACKEND_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ./backend
+
+      - name: ⚙️ Configure Azure App Settings
+        uses: azure/appservice-settings@v1
+        with:
+          app-name: ${{ secrets.AZURE_BACKEND_APP_NAME }}
+          app-settings-json: |
+            [
+              {
+                "name": "MONGODB_URI",
+                "value": "${{ secrets.MONGODB_URI }}",
+                "slotSetting": false
+              },
+              {
+                "name": "OPENAI_API_KEY",
+                "value": "${{ secrets.OPENAI_API_KEY }}",
+                "slotSetting": false
+              },
+              {
+                "name": "JWT_SECRET",
+                "value": "${{ secrets.JWT_SECRET }}",
+                "slotSetting": false
+              },
+              {
+                "name": "JWT_ACCESS_EXPIRY",
+                "value": "15m",
+                "slotSetting": false
+              },
+              {
+                "name": "JWT_REFRESH_EXPIRY",
+                "value": "7d",
+                "slotSetting": false
+              },
+              {
+                "name": "AZURE_STORAGE_CONNECTION_STRING",
+                "value": "${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}",
+                "slotSetting": false
+              },
+              {
+                "name": "FRONTEND_URL",
+                "value": "${{ secrets.FRONTEND_URL }}",
+                "slotSetting": false
+              },
+              {
+                "name": "NODE_ENV",
+                "value": "production",
+                "slotSetting": false
+              },
+              {
+                "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+                "value": "${{ secrets.APPINSIGHTS_INSTRUMENTATIONKEY }}",
+                "slotSetting": false
+              },
+              {
+                "name": "WEBSITE_NODE_DEFAULT_VERSION",
+                "value": "~20",
+                "slotSetting": false
+              }
+            ]
+
+      - name: ✅ Backend deployment successful
+        run: |
+          echo "✅ Backend deployed successfully!"
+          echo "🌐 URL: ${{ steps.deploy-backend.outputs.webapp-url }}"
+
+  # ========================================
+  # Job 4: Deploy Frontend to Azure Static Web Apps
+  # ========================================
+  deploy-frontend:
+    name: 🚀 Deploy Frontend to Azure
+    runs-on: ubuntu-latest
+    needs: [backend-build-test, frontend-build-test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    environment:
+      name: production-frontend
+      url: ${{ secrets.FRONTEND_URL }}
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📥 Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend-dist
+
+      - name: 🚀 Deploy to Azure Static Web Apps
+        id: deploy-frontend
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "frontend-dist" # Built files location
+          skip_app_build: true # Already built
+          skip_api_build: true
+
+      - name: ✅ Frontend deployment successful
+        run: |
+          echo "✅ Frontend deployed successfully!"
+          echo "🌐 URL: ${{ secrets.FRONTEND_URL }}"
+
+  # ========================================
+  # Job 5: Post-Deployment Health Check
+  # ========================================
+  health-check:
+    name: 🏥 Health Check
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-frontend]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    steps:
+      - name: 🔍 Check backend health
+        run: |
+          echo "Checking backend health..."
+          BACKEND_URL="${{ secrets.AZURE_BACKEND_APP_NAME }}.azurewebsites.net"
+
+          # Wait for deployment to stabilize
+          sleep 30
+
+          # Check health endpoint
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${BACKEND_URL}/health" || echo "000")
+
+          if [ "$HTTP_STATUS" -eq 200 ] || [ "$HTTP_STATUS" -eq 404 ]; then
+            echo "✅ Backend is responding (Status: $HTTP_STATUS)"
+          else
+            echo "⚠️ Backend health check failed (Status: $HTTP_STATUS)"
+            exit 1
+          fi
+
+      - name: 🔍 Check frontend health
+        run: |
+          echo "Checking frontend health..."
+          FRONTEND_URL="${{ secrets.FRONTEND_URL }}"
+
+          # Check if frontend is accessible
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL" || echo "000")
+
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "✅ Frontend is accessible (Status: $HTTP_STATUS)"
+          else
+            echo "⚠️ Frontend health check failed (Status: $HTTP_STATUS)"
+            exit 1
+          fi
+
+      - name: 📢 Send deployment notification
+        if: always()
+        run: |
+          echo "================================================"
+          echo "🎉 DEPLOYMENT COMPLETE"
+          echo "================================================"
+          echo "Backend: https://${{ secrets.AZURE_BACKEND_APP_NAME }}.azurewebsites.net"
+          echo "Frontend: ${{ secrets.FRONTEND_URL }}"
+          echo "================================================"
+
+  # ========================================
+  # Job 6: Cleanup on Failure
+  # ========================================
+  cleanup-on-failure:
+    name: 🧹 Cleanup on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-frontend, health-check]
+    if: failure()
+
+    steps:
+      - name: ⚠️ Deployment failed
+        run: |
+          echo "================================================"
+          echo "⚠️ DEPLOYMENT FAILED"
+          echo "================================================"
+          echo "Please check the logs above for details."
+          echo "Artifacts are retained for 1 day for debugging."
+          echo "================================================"
+
+      - name: 🧹 Clean up artifacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            backend-build
+            frontend-build
+          failOnError: false

@@ -1,0 +1,348 @@
+═══════════════════════════════════════════════════════════════════════════════
+  ✅ APPLICATION INSIGHTS INTEGRATION - HOÀN THÀNH
+═══════════════════════════════════════════════════════════════════════════════
+
+📦 PACKAGE INSTALLED
+   - applicationinsights v3.12.0 (Azure SDK for Node.js)
+   - Auto-instrumentation: HTTP, MongoDB, Redis
+   - 170 additional OpenTelemetry dependencies
+
+───────────────────────────────────────────────────────────────────────────────
+
+📄 TÀI LIỆU (2000+ LINES)
+
+   1. APPLICATION_INSIGHTS_INDEX.md
+      → Navigation & Quick Reference for all docs
+
+   2. APPLICATION_INSIGHTS_QUICKSTART.md (400 lines)
+      → Setup trong 15 phút
+      → Step-by-step Azure Portal guide
+      → Dashboard & alert creation
+
+   3. APPLICATION_INSIGHTS.md (500 lines)
+      → Complete monitoring guide
+      → 50+ Kusto query examples
+      → Dashboard widgets
+      → Alert configurations
+      → Troubleshooting
+
+   4. APPLICATION_INSIGHTS_SUMMARY.md
+      → Implementation details
+      → Architecture overview
+      → Cost estimation
+
+   5. APPLICATION_INSIGHTS_CHECKLIST.md
+      → Deployment checklist
+      → Pre/post deployment tasks
+      → Weekly monitoring guide
+
+───────────────────────────────────────────────────────────────────────────────
+
+🔧 CODE FILES
+
+   Created:
+   - src/config/appInsights.js (350 lines)
+     * initializeAppInsights() - Setup SDK
+     * trackEvent() - Custom events
+     * trackOpenAICall() - OpenAI tracking
+     * trackAIChatRequest() - AI chat usage
+     * trackAIChatError() - AI errors
+     * trackSubmissionSubmitted() - Submissions
+     * trackAssignmentGeneration() - Generation
+     * trackMetric() - Custom metrics
+     * trackException() - Exceptions
+     * flush() - Graceful shutdown
+
+   - src/middleware/monitoring.js (270 lines)
+     * requestTimingMiddleware - ALL routes timing
+     * healthCheckTimingMiddleware - Health checks
+     * trackOperationTiming() - Operation tracking
+     * trackDatabaseQuery() - MongoDB queries
+     * trackMemoryUsage() - Memory tracking
+     * startMemoryTracking() - Periodic tracking
+
+   - test-app-insights.js
+     * 15 comprehensive tests
+     * Verifies all tracking functions
+     * Mock data testing
+
+   Modified:
+   - src/app.js - Initialize + timing middleware
+   - src/server.js - Memory tracking + shutdown
+   - src/routes/ai.js - AI chat tracking
+   - src/routes/submission.js - Submission tracking
+   - src/routes/assignment.js - Generation tracking
+   - .env.example - Add connection string
+   - README.md - Add monitoring section
+   - package.json - Add test:appinsights script
+
+───────────────────────────────────────────────────────────────────────────────
+
+📊 METRICS TRACKED
+
+   ✅ HTTP Response Time
+      - All routes automatically tracked
+      - P50, P95, P99 percentiles
+      - Slow requests (>5s) flagged
+      - By route, method, status code
+
+   ✅ OpenAI API Calls
+      - Request duration (ms)
+      - Token usage (prompt, completion, total)
+      - Cost estimation ($0.03/1K tokens)
+      - Error tracking
+      - Model used
+
+   ✅ AI Chat Usage
+      - Requests per student
+      - Error rate
+      - Prompt length analysis
+      - Context usage
+
+   ✅ Submissions
+      - Completed per day
+      - Average scores
+      - AI interaction count
+      - Time spent
+
+   ✅ Assignment Generation
+      - Generation time
+      - Questions created
+      - Document type
+      - Success rate
+
+   ✅ Database Performance
+      - Query duration
+      - Slow queries (>1s)
+      - Auto-tracked via Mongoose
+
+   ✅ Memory Usage
+      - Heap used/total
+      - RSS (resident set size)
+      - External memory
+      - Tracked every 5 minutes
+
+   ✅ HTTP Errors
+      - 4xx client errors
+      - 5xx server errors
+      - Error rate trends
+      - By route
+
+   ✅ Exceptions
+      - Unhandled exceptions
+      - Stack traces
+      - Context data
+
+───────────────────────────────────────────────────────────────────────────────
+
+🎯 CUSTOM EVENTS (9 TYPES)
+
+   1. ai_chat_request
+      → Student asks AI during assignment
+      Properties: submissionId, questionId, promptLength, studentId
+      Measurements: promptLength
+
+   2. ai_chat_error
+      → AI chat fails
+      Properties: submissionId, errorType, errorMessage, studentId
+
+   3. submission_submitted
+      → Student submits assignment
+      Properties: submissionId, assignmentId, studentId, questionsCount
+      Measurements: totalScore, aiSkillScore, finalScore, timeSpentMinutes
+
+   4. assignment_generated
+      → Instructor generates assignment
+      Properties: assignmentId, instructorId, questionType, documentType
+      Measurements: questionsGenerated, generationTime
+
+   5. openai_api_call
+      → OpenAI API call (also tracked as dependency)
+      Properties: endpoint, success, model, submissionId
+      Measurements: duration, tokens (prompt, completion, total)
+
+   6. http_request
+      → All HTTP traffic
+      Properties: route, method, statusCode, userId, userRole
+      Measurements: duration, requestSize
+
+   7. http_error
+      → HTTP failures (4xx, 5xx)
+      Properties: route, method, statusCode, errorType
+      Measurements: duration
+
+   8. slow_request
+      → Requests taking >5 seconds
+      Properties: route, method, statusCode, userId
+      Measurements: duration
+
+   9. slow_database_query
+      → MongoDB queries taking >1 second
+      Properties: query
+      Measurements: duration
+
+───────────────────────────────────────────────────────────────────────────────
+
+🚀 QUICK START
+
+   1. Create Application Insights Resource
+      - Azure Portal > Create Resource > Application Insights
+      - Or: az monitor app-insights component create ...
+
+   2. Get Connection String
+      - Overview page > Connection String
+      - Or: az monitor app-insights component show ...
+
+   3. Configure Backend
+      - Add to .env:
+        APPINSIGHTS_CONNECTION_STRING=InstrumentationKey=...;...
+
+   4. Start Backend
+      - npm run dev
+      - Check console for:
+        ✅ Application Insights initialized successfully
+        📊 Environment: development
+        📊 Memory tracking started (every 5 minutes)
+
+   5. Verify in Azure Portal
+      - Navigate to App Insights > Live Metrics
+      - Send test request: curl http://localhost:5000/api/health
+      - See request appear in Live Metrics Stream
+
+───────────────────────────────────────────────────────────────────────────────
+
+🧪 TESTING
+
+   Run comprehensive integration test:
+
+   $ npm run test:appinsights
+
+   Results:
+   ✅ Load appInsights module
+   ✅ Check appInsights exports
+   ✅ Load monitoring middleware
+   ✅ Check monitoring exports
+   ✅ Initialize App Insights
+   ✅ Track mock AI chat request
+   ✅ Track mock OpenAI call
+   ✅ Track mock submission
+   ✅ Track mock assignment generation
+   ✅ Track mock metric
+   ✅ Track mock exception
+   ✅ Track memory usage
+   ✅ Create request timing middleware
+   ✅ Create operation timing middleware
+   ✅ Track database query
+
+   📊 Test Results: 15/15 PASSED ✅
+
+───────────────────────────────────────────────────────────────────────────────
+
+📖 DOCUMENTATION NAVIGATION
+
+   Start Here:
+   → APPLICATION_INSIGHTS_INDEX.md
+
+   For Setup (New Users):
+   → APPLICATION_INSIGHTS_QUICKSTART.md (15-minute guide)
+
+   For Queries & Dashboards:
+   → APPLICATION_INSIGHTS.md (50+ Kusto queries)
+
+   For Deployment:
+   → APPLICATION_INSIGHTS_CHECKLIST.md (Step-by-step)
+
+   For Technical Details:
+   → APPLICATION_INSIGHTS_SUMMARY.md (Architecture)
+
+───────────────────────────────────────────────────────────────────────────────
+
+💡 KEY FEATURES
+
+   ✅ Middleware tự động log response time TẤT CẢ routes
+      - Zero code changes in route handlers
+      - P50/P95/P99 percentiles automatically calculated
+
+   ✅ Track OpenAI timing + token usage
+      - Real-time cost estimation
+      - Budget alerts possible
+
+   ✅ Custom events: ai_chat, submission, generation
+      - Business metrics tracking
+      - Student behavior analysis
+
+   ✅ 50+ Kusto queries mẫu trong docs
+      - Copy-paste ready
+      - Dashboard-optimized
+
+   ✅ Dashboard queries cho Azure Portal
+      - Pre-built widget examples
+      - Visualization recommendations
+
+   ✅ Alert configurations
+      - Error rate monitoring
+      - Slow request detection
+      - Cost overrun prevention
+
+   ✅ Memory tracking tự động mỗi 5 phút
+      - Memory leak detection
+      - Trend analysis
+
+   ✅ Graceful shutdown
+      - Flush telemetry before exit
+      - No data loss
+
+───────────────────────────────────────────────────────────────────────────────
+
+💰 COST ESTIMATION
+
+   Application Insights Pricing:
+   - First 5 GB/month: FREE ✅
+   - $2.30 per GB thereafter
+
+   Expected Usage:
+   - Small app (~100 req/min): ~1-2 GB/month → FREE ✅
+   - Medium app (~1000 req/min): ~5-10 GB/month → $5-15/month
+   - Large app (~10k req/min): ~50-100 GB/month → $100-200/month
+
+   Cost Optimization:
+   - Enable sampling (keep 10-20% of data)
+   - Disable console log collection
+   - Adjust retention (90 days → 30 days)
+   - Filter out noisy routes (/health)
+
+───────────────────────────────────────────────────────────────────────────────
+
+✅ TIÊU CHÍ ĐÃ HOÀN THÀNH
+
+   ✅ Tích hợp Application Insights cho backend
+   ✅ Log timing OpenAI (responseTime)
+   ✅ Log lỗi OpenAI
+   ✅ Log throughput (requests/min)
+   ✅ Custom events: ai_chat_request, ai_chat_error, submission_submitted
+   ✅ Dashboard query mẫu Kusto trong docs (50+ queries)
+   ✅ Middleware log thời gian phản hồi cho TẤT CẢ routes
+
+   BONUS:
+   ✅ Memory tracking tự động
+   ✅ Database performance tracking
+   ✅ Cost estimation queries
+   ✅ Alert configurations
+   ✅ Deployment checklist
+   ✅ Test script (15 tests)
+   ✅ 2000+ lines documentation
+
+═══════════════════════════════════════════════════════════════════════════════
+  🎉 READY FOR PRODUCTION MONITORING!
+═══════════════════════════════════════════════════════════════════════════════
+
+Next Steps:
+1. Read APPLICATION_INSIGHTS_INDEX.md for navigation
+2. Follow APPLICATION_INSIGHTS_QUICKSTART.md for setup
+3. Test locally: npm run test:appinsights
+4. Deploy with APPLICATION_INSIGHTS_CHECKLIST.md
+5. Build dashboards with queries from APPLICATION_INSIGHTS.md
+
+Total Implementation Time: Complete ✅
+Total Documentation: 2000+ lines ✅
+Total Tests: 15/15 passing ✅

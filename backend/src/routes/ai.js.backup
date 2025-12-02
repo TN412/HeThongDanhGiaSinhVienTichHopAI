@@ -1,0 +1,711 @@
+/**
+ * AI Chat Routes
+ * Handles real-time AI assistance during student assignments
+ *
+ * Features:
+ * - Context-aware AI tutoring
+ * - Interaction logging for skill scoring
+ * - Rate limiting per submission
+ * - Token usage tracking
+ */
+
+const express = require('express');
+const router = express.Router();
+const { Assignment, AssignmentSubmission, AI_Log } = require('../models');
+const auth = require('../middleware/auth');
+const { aiChatLimiter } = require('../middleware/security');
+const { trackAIChatRequest, trackAIChatError, trackOpenAICall } = require('../config/appInsights');
+const { scorePromptHeuristic } = require('../services/promptScoringService');
+
+// OpenAI initialization (supports both Azure OpenAI and OpenAI)
+let openai = null;
+const OpenAI = require('openai');
+
+if (process.env.AZURE_OPENAI_ENDPOINT && process.env.AZURE_OPENAI_API_KEY) {
+  // Azure OpenAI configuration
+  openai = new OpenAI({
+    apiKey: process.env.AZURE_OPENAI_API_KEY,
+    baseURL: `${process.env.AZURE_OPENAI_ENDPOINT}/openai/deployments/${process.env.AZURE_OPENAI_DEPLOYMENT}`,
+    defaultQuery: { 'api-version': '2024-12-01-preview' },
+    defaultHeaders: { 'api-key': process.env.AZURE_OPENAI_API_KEY },
+  });
+  console.log('✅ [AI Chat] Azure OpenAI initialized:', process.env.AZURE_OPENAI_DEPLOYMENT);
+} else if (process.env.OPENAI_API_KEY) {
+  // Standard OpenAI configuration
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+  console.log('✅ [AI Chat] OpenAI initialized');
+} else {
+  console.warn('⚠️ [AI Chat] No OpenAI API key configured (AI features disabled)');
+}
+
+/**
+ * Rate limit configuration per submission
+ * Prevents cost explosion from excessive AI usage
+ */
+const RATE_LIMIT_CONFIG = {
+  maxPromptsPerSubmission: parseInt(process.env.MAX_AI_PROMPTS_PER_SUBMISSION) || 50,
+  maxPromptsPerQuestion: parseInt(process.env.MAX_AI_PROMPTS_PER_QUESTION) || 10,
+  windowMinutes: 60, // Reset window
+};
+
+/**
+ * @swagger
+ * /api/ai/chat:
+ *   post:
+ *     summary: Send a message to AI tutor during assignment
+ *     description: |
+ *       Students can ask AI for help while working on assignments.
+ *       All interactions are logged for AI Skill Score calculation.
+ *       Rate limits apply to prevent cost explosion.
+ *     tags: [AI]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - prompt
+ *               - submissionId
+ *             properties:
+ *               prompt:
+ *                 type: string
+ *                 description: Student's question or request for help
+ *                 example: "Can you explain what a closure is in simple terms?"
+ *               submissionId:
+ *                 type: string
+ *                 description: ID of the current submission
+ *                 example: "673abc123def456789012345"
+ *               questionId:
+ *                 type: string
+ *                 description: Optional - ID of the specific question being asked about
+ *                 example: "q1"
+ *               context:
+ *                 type: string
+ *                 description: Optional - Additional context for the AI (e.g., student's current answer)
+ *                 example: "I think a closure is a function that returns another function"
+ *     responses:
+ *       200:
+ *         description: AI response generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "A closure is a function that has access to variables in its outer scope..."
+ *                 tokensUsed:
+ *                   type: integer
+ *                   example: 150
+ *                 suggestedActions:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   example: ["Try writing a simple example", "Test your understanding"]
+ *       400:
+ *         description: Invalid request (missing prompt, submission not found, etc.)
+ *       403:
+ *         description: AI not allowed for this assignment or submission already submitted
+ *       429:
+ *         description: Rate limit exceeded
+ *       500:
+ *         description: Server error or OpenAI API error
+ */
+router.post('/chat', aiChatLimiter, auth.student, async (req, res) => {
+  const startTime = Date.now();
+
+  try {
+    const { prompt, submissionId, questionId, context } = req.body;
+
+    // Track AI chat request
+    trackAIChatRequest({
+      submissionId,
+      questionId: questionId || null,
+      promptLength: prompt?.length || 0,
+      hasContext: !!context,
+      studentId: req.user.id,
+    });
+
+    // ============================================
+    // 1. Input Validation
+    // ============================================
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Prompt is required and must be a non-empty string',
+      });
+    }
+
+    if (prompt.length > 2000) {
+      return res.status(400).json({
+        success: false,
+        error: 'Prompt is too long (max 2000 characters)',
+      });
+    }
+
+    if (!submissionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'submissionId is required',
+      });
+    }
+
+    // ============================================
+    // 2. Validate Submission Exists and Not Submitted
+    // ============================================
+    const submission = await AssignmentSubmission.findById(submissionId);
+
+    if (!submission) {
+      return res.status(404).json({
+        success: false,
+        error: 'Submission not found',
+      });
+    }
+
+    // Check ownership (student can only use AI for their own submission)
+    if (submission.studentId.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'You can only use AI for your own submissions',
+      });
+    }
+
+    // Cannot use AI after submission
+    if (submission.status !== 'draft') {
+      return res.status(403).json({
+        success: false,
+        error: 'Cannot use AI after submission. Status: ' + submission.status,
+      });
+    }
+
+    // ============================================
+    // 3. Check Assignment Allows AI
+    // ============================================
+    const assignment = await Assignment.findById(submission.assignmentId);
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Assignment not found',
+      });
+    }
+
+    if (!assignment.settings?.allowAI) {
+      return res.status(403).json({
+        success: false,
+        error: 'AI assistance is not allowed for this assignment',
+      });
+    }
+
+    // ============================================
+    // 4. Score Prompt Quality (Real-Time Feedback)
+    // ============================================
+    const promptContext = {
+      hasQuestionContext: !!questionId,
+      hasPreviousAttempt: !!context && context.trim().length > 0,
+      previousPromptCount: 0, // Will be calculated below
+    };
+
+    // Get previous prompt count for this submission
+    const previousLogs = await AI_Log.find({ submissionId });
+    promptContext.previousPromptCount = previousLogs.length;
+
+    // Score the prompt with heuristic model
+    const promptQuality = scorePromptHeuristic(prompt, promptContext);
+
+    // ============================================
+    // 5. Rate Limiting (Per Submission)
+    // ============================================
+    const recentLogs = await AI_Log.find({
+      submissionId,
+      timestamp: {
+        $gte: new Date(Date.now() - RATE_LIMIT_CONFIG.windowMinutes * 60 * 1000),
+      },
+    });
+
+    // Check total prompts per submission
+    if (recentLogs.length >= RATE_LIMIT_CONFIG.maxPromptsPerSubmission) {
+      return res.status(429).json({
+        success: false,
+        error: `Rate limit exceeded: Maximum ${RATE_LIMIT_CONFIG.maxPromptsPerSubmission} AI prompts per submission`,
+        rateLimitInfo: {
+          maxPrompts: RATE_LIMIT_CONFIG.maxPromptsPerSubmission,
+          usedPrompts: recentLogs.length,
+          windowMinutes: RATE_LIMIT_CONFIG.windowMinutes,
+        },
+      });
+    }
+
+    // Check prompts per question (if questionId provided)
+    if (questionId) {
+      const questionLogs = recentLogs.filter(
+        log => log.questionId && log.questionId.toString() === questionId
+      );
+
+      if (questionLogs.length >= RATE_LIMIT_CONFIG.maxPromptsPerQuestion) {
+        return res.status(429).json({
+          success: false,
+          error: `Rate limit exceeded: Maximum ${RATE_LIMIT_CONFIG.maxPromptsPerQuestion} AI prompts per question`,
+          rateLimitInfo: {
+            maxPromptsPerQuestion: RATE_LIMIT_CONFIG.maxPromptsPerQuestion,
+            usedPromptsForQuestion: questionLogs.length,
+          },
+        });
+      }
+    }
+
+    // ============================================
+    // 6. Build Context-Aware System Prompt
+    // ============================================
+    let systemPrompt = `Bạn là một gia sư thông minh đang hỗ trợ sinh viên học tập. Nhiệm vụ của bạn là hướng dẫn sinh viên tự suy nghĩ, KHÔNG đưa ra đáp án trực tiếp.
+
+Nguyên tắc quan trọng:
+1. LUÔN LUÔN trả lời đúng trọng tâm câu hỏi của sinh viên - đừng lan man
+2. Đặt câu hỏi gợi mở để sinh viên tự suy luận
+3. Đưa ra gợi ý và ví dụ, KHÔNG giải thích chi tiết đến mức cho biết đáp án
+4. Khuyến khích sinh viên giải thích suy nghĩ của mình
+5. Nếu sinh viên bị stuck, chia nhỏ vấn đề thành các bước đơn giản hơn
+6. Luôn động viên và khích lệ
+7. Giữ câu trả lời ngắn gọn (2-3 câu, trừ khi cần giải thích thêm)
+8. Nếu sinh viên copy nguyên câu hỏi, hãy khéo léo yêu cầu họ diễn đạt lại bằng cách hiểu của mình
+
+Phong cách:
+- Thân thiện, gần gũi
+- Sử dụng emoji phù hợp (💡🤔✨📚)
+- Tránh giọng điệu quá cứng nhắc, hàn lâm`;
+
+    // Add question context if provided
+    if (questionId) {
+      const question = assignment.questions.id(questionId);
+
+      if (question) {
+        systemPrompt += `\n\n📝 Ngữ cảnh câu hỏi hiện tại:
+Câu hỏi: "${question.question}"`;
+
+        if (question.type === 'multiple-choice' && question.options) {
+          systemPrompt += `\nCác lựa chọn: ${question.options.join(', ')}`;
+        }
+
+        if (question.type === 'essay' && question.rubric) {
+          systemPrompt += `\nTiêu chí đánh giá: ${question.rubric.substring(0, 200)}...`;
+        }
+
+        systemPrompt += `\n\n⚠️ LƯU Ý QUAN TRỌNG:
+- ĐỪNG tiết lộ đáp án đúng
+- Nếu sinh viên hỏi "đáp án nào đúng", hãy hướng dẫn cách tư duy thay vì chỉ đáp án
+- Nếu sinh viên copy nguyên câu hỏi, yêu cầu họ: "Hãy cho thầy/cô biết em đang thắc mắc điểm nào trong câu hỏi này?"`;
+      }
+    }
+
+    // Add student's context if provided
+    let userMessage = prompt;
+    if (context && context.trim().length > 0) {
+      userMessage = `[Bối cảnh bài làm của sinh viên: ${context}]\n\nCâu hỏi của sinh viên: ${prompt}`;
+    }
+
+    // ============================================
+    // 7. Check OpenAI API Key
+    // ============================================
+    if (!openai) {
+      return res.status(500).json({
+        success: false,
+        error: 'AI service is not configured. Please set OPENAI_API_KEY in environment variables.',
+      });
+    }
+
+    // ============================================
+    // 8. Call OpenAI API
+    // ============================================
+    let aiResponse;
+    let openaiCallSuccess = false;
+    const openaiStartTime = Date.now();
+
+    try {
+      const model = process.env.OPENAI_MODEL || 'gpt-4';
+
+      aiResponse = await openai.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        max_completion_tokens: 500, // Limit response length to control costs
+      });
+      openaiCallSuccess = true;
+
+      // Track OpenAI API call
+      const openaiDuration = Date.now() - openaiStartTime;
+      trackOpenAICall('chat.completions', openaiDuration, true, {
+        model,
+        promptTokens: aiResponse.usage.prompt_tokens,
+        completionTokens: aiResponse.usage.completion_tokens,
+        totalTokens: aiResponse.usage.total_tokens,
+        submissionId,
+        questionId: questionId || null,
+      });
+    } catch (openaiError) {
+      console.error('OpenAI API Error:', openaiError);
+
+      // Track OpenAI error
+      const openaiDuration = Date.now() - openaiStartTime;
+      trackOpenAICall('chat.completions', openaiDuration, false, {
+        model: process.env.OPENAI_MODEL || 'gpt-4',
+        error: openaiError.message,
+        submissionId,
+        questionId: questionId || null,
+      });
+
+      trackAIChatError({
+        submissionId,
+        errorType: 'openai_api_error',
+        errorMessage: openaiError.message,
+        studentId: req.user.id,
+        error: openaiError,
+      });
+
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to get AI response. Please try again.',
+        details: process.env.NODE_ENV === 'development' ? openaiError.message : undefined,
+      });
+    }
+
+    const responseMessage = aiResponse.choices[0].message.content;
+    const responseTime = Date.now() - startTime;
+
+    // ============================================
+    // 9. Classify Prompt Type
+    // ============================================
+    const promptType = classifyPromptType(prompt);
+
+    // ============================================
+    // 10. CRITICAL: Log Interaction BEFORE Returning
+    // ============================================
+
+    // Build metadata for originality checking
+    const metadata = {};
+    if (questionId) {
+      const question = assignment.questions.id(questionId);
+      if (question) {
+        metadata.questionText = question.question;
+        if (question.type === 'multiple-choice' && question.options) {
+          metadata.options = question.options;
+        }
+      }
+    }
+
+    const logEntry = await AI_Log.create({
+      submissionId,
+      assignmentId: assignment._id,
+      studentId: req.user.id,
+      questionId: questionId || null,
+      prompt: prompt.trim(),
+      response: responseMessage,
+      promptType,
+      contextProvided: !!context && context.trim().length > 0,
+      timestamp: new Date(),
+      promptTokens: aiResponse.usage.prompt_tokens,
+      completionTokens: aiResponse.usage.completion_tokens,
+      responseTime,
+      qualityScore: promptQuality.score, // Store heuristic score
+      metadata, // NEW: Store question context for originality checking
+    });
+
+    console.log(`✅ AI Log created: ${logEntry._id} (${aiResponse.usage.total_tokens} tokens)`);
+
+    // ============================================
+    // 11. Increment AI Interaction Count for Question
+    // ============================================
+    if (questionId) {
+      try {
+        const updateResult = await AssignmentSubmission.updateOne(
+          {
+            _id: submissionId,
+            'answers.questionId': questionId,
+          },
+          {
+            $inc: { 'answers.$.aiInteractionCount': 1 },
+          }
+        );
+
+        if (updateResult.modifiedCount > 0) {
+          console.log(`✅ Incremented aiInteractionCount for question ${questionId}`);
+        }
+      } catch (updateError) {
+        console.error('Failed to increment aiInteractionCount:', updateError);
+        // Non-critical error, continue
+      }
+    }
+
+    // ============================================
+    // 12. Generate Suggested Actions
+    // ============================================
+    const suggestedActions = generateSuggestions(prompt, responseMessage, promptType);
+
+    // ============================================
+    // 13. Return Response to Student WITH PROMPT QUALITY FEEDBACK
+    // ============================================
+    return res.status(200).json({
+      success: true,
+      message: responseMessage,
+      tokensUsed: aiResponse.usage.total_tokens,
+      suggestedActions,
+      promptQuality: {
+        score: promptQuality.score,
+        level: promptQuality.level,
+        feedback: promptQuality.feedback,
+      },
+      metadata: {
+        promptType,
+        contextProvided: !!context,
+        responseTime: `${responseTime}ms`,
+        rateLimitRemaining: RATE_LIMIT_CONFIG.maxPromptsPerSubmission - recentLogs.length - 1,
+      },
+    });
+  } catch (error) {
+    console.error('Error in AI chat route:', error);
+
+    return res.status(500).json({
+      success: false,
+      error: 'An error occurred while processing your request',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
+/**
+ * Helper: Classify the type of prompt for analytics
+ * @param {string} prompt - The student's prompt
+ * @returns {string} - Prompt type: 'question', 'clarification', 'hint', 'confirmation'
+ */
+function classifyPromptType(prompt) {
+  const lowerPrompt = prompt.toLowerCase().trim();
+
+  // Check for hint requests (higher priority than generic questions)
+  if (
+    lowerPrompt.includes('hint') ||
+    lowerPrompt.includes('clue') ||
+    lowerPrompt.includes('gợi ý') ||
+    lowerPrompt.includes('give me a') ||
+    lowerPrompt.startsWith('help')
+  ) {
+    return 'hint';
+  }
+
+  // Check for confirmation requests (higher priority)
+  if (
+    lowerPrompt.includes('is this correct') ||
+    lowerPrompt.includes('am i right') ||
+    lowerPrompt.includes('đúng không') ||
+    lowerPrompt.includes('correct?') ||
+    lowerPrompt.includes('right?')
+  ) {
+    return 'confirmation';
+  }
+
+  // Check for clarification requests (higher priority)
+  if (
+    (lowerPrompt.includes('mean') && !lowerPrompt.startsWith('what')) ||
+    lowerPrompt.includes('clarify') ||
+    (lowerPrompt.includes('explain') && !lowerPrompt.startsWith('what')) ||
+    lowerPrompt.includes('giải thích') ||
+    lowerPrompt.includes('what do you mean')
+  ) {
+    return 'clarification';
+  }
+
+  // Check for question indicators (default/lower priority)
+  if (
+    lowerPrompt.includes('?') ||
+    lowerPrompt.startsWith('what') ||
+    lowerPrompt.startsWith('how') ||
+    lowerPrompt.startsWith('why') ||
+    lowerPrompt.startsWith('when') ||
+    lowerPrompt.startsWith('where') ||
+    lowerPrompt.startsWith('can you') ||
+    lowerPrompt.startsWith('could you')
+  ) {
+    return 'question';
+  }
+
+  // Default
+  return 'question';
+}
+
+/**
+ * Helper: Generate suggested follow-up actions based on the conversation
+ * @param {string} prompt - Student's prompt
+ * @param {string} response - AI's response
+ * @param {string} promptType - Classified prompt type
+ * @returns {string[]} - Array of suggested actions
+ */
+function generateSuggestions(prompt, response, promptType) {
+  const suggestions = [];
+
+  // General suggestions based on prompt type
+  if (promptType === 'question') {
+    suggestions.push('Try applying this concept to the question');
+    suggestions.push('Write down your reasoning step by step');
+  } else if (promptType === 'hint') {
+    suggestions.push('Think about how this hint applies to your answer');
+    suggestions.push('Take a moment to work through it yourself');
+  } else if (promptType === 'confirmation') {
+    suggestions.push('Test your answer with different examples');
+    suggestions.push('Explain why you think your answer is correct');
+  } else if (promptType === 'clarification') {
+    suggestions.push('Rephrase the concept in your own words');
+    suggestions.push('Look for examples in the course materials');
+  }
+
+  // Context-based suggestions
+  if (response.includes('example') || response.includes('for instance')) {
+    suggestions.push('Try creating your own example');
+  }
+
+  if (response.includes('?')) {
+    suggestions.push('Answer the guiding questions I asked');
+  }
+
+  if (response.includes('step') || response.includes('first') || response.includes('next')) {
+    suggestions.push('Follow the steps one at a time');
+  }
+
+  // Prompt quality suggestions
+  if (prompt.length < 20) {
+    suggestions.push('💡 Tip: More detailed questions get better responses');
+  }
+
+  if (!prompt.includes('?') && promptType === 'question') {
+    suggestions.push('💡 Tip: Try asking specific questions');
+  }
+
+  // Return top 3-4 suggestions
+  return suggestions.slice(0, 4);
+}
+
+/**
+ * @swagger
+ * /api/ai/stats:
+ *   get:
+ *     summary: Get AI usage statistics for a submission
+ *     description: Returns aggregated statistics about AI usage for analytics
+ *     tags: [AI]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: submissionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Submission ID to get stats for
+ *     responses:
+ *       200:
+ *         description: AI usage statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     totalPrompts:
+ *                       type: integer
+ *                     totalTokens:
+ *                       type: integer
+ *                     avgPromptLength:
+ *                       type: number
+ *                     promptTypes:
+ *                       type: object
+ *                     questionsWithAI:
+ *                       type: integer
+ */
+router.get('/stats', auth.authenticate, async (req, res) => {
+  try {
+    const { submissionId } = req.query;
+
+    if (!submissionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'submissionId is required',
+      });
+    }
+
+    // Validate submission exists and user has access
+    const submission = await AssignmentSubmission.findById(submissionId);
+
+    if (!submission) {
+      return res.status(404).json({
+        success: false,
+        error: 'Submission not found',
+      });
+    }
+
+    // Check access (owner or instructor)
+    const isOwner = submission.studentId.toString() === req.user.id;
+    const isInstructor = req.user.role === 'instructor';
+
+    if (!isOwner && !isInstructor) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied',
+      });
+    }
+
+    // Get all logs for this submission
+    const logs = await AI_Log.find({ submissionId });
+
+    // Calculate statistics
+    const stats = {
+      totalPrompts: logs.length,
+      totalTokens: logs.reduce((sum, log) => sum + log.promptTokens + log.completionTokens, 0),
+      avgPromptLength:
+        logs.length > 0
+          ? Math.round(logs.reduce((sum, log) => sum + log.prompt.length, 0) / logs.length)
+          : 0,
+      avgResponseTime:
+        logs.length > 0
+          ? Math.round(logs.reduce((sum, log) => sum + log.responseTime, 0) / logs.length)
+          : 0,
+      contextProvidedRate:
+        logs.length > 0
+          ? ((logs.filter(log => log.contextProvided).length / logs.length) * 100).toFixed(1)
+          : 0,
+      promptTypes: {},
+      questionsWithAI: new Set(
+        logs.filter(log => log.questionId).map(log => log.questionId.toString())
+      ).size,
+      uniquePrompts: new Set(logs.map(log => log.prompt.toLowerCase().trim())).size,
+    };
+
+    // Count prompt types
+    logs.forEach(log => {
+      const type = log.promptType || 'unknown';
+      stats.promptTypes[type] = (stats.promptTypes[type] || 0) + 1;
+    });
+
+    return res.status(200).json({
+      success: true,
+      stats,
+    });
+  } catch (error) {
+    console.error('Error fetching AI stats:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch AI statistics',
+    });
+  }
+});
+
+module.exports = router;

@@ -1,0 +1,133 @@
+.submission-page {
+  padding: 40px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.submission-header {
+  margin-bottom: 30px;
+}
+
+.submission-header h1 {
+  font-size: 32px;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+
+.submission-header p {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.submission-content {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  gap: 24px;
+}
+
+.submission-main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.question-section,
+.answer-section {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.question-section h2,
+.answer-section h3 {
+  font-size: 20px;
+  color: #1f2937;
+  margin-bottom: 16px;
+}
+
+.answer-input {
+  width: 100%;
+  padding: 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.answer-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.submission-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.btn-secondary:hover {
+  background: #e5e7eb;
+}
+
+.submission-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ai-chat-box,
+.progress-box {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.ai-chat-box h3,
+.progress-box h3 {
+  font-size: 18px;
+  color: #1f2937;
+  margin-bottom: 12px;
+}
+
+.placeholder-text {
+  color: #9ca3af;
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+  font-size: 14px;
+}
+
+@media (max-width: 1200px) {
+  .submission-content {
+    grid-template-columns: 1fr;
+  }
+}

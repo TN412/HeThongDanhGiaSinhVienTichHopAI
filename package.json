@@ -1,0 +1,33 @@
+{
+  "name": "ai-assessment-system",
+  "version": "1.0.0",
+  "description": "AI-Integrated Student Assessment System - Monorepo",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm install --workspace=backend && npm install --workspace=frontend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev": "npm run dev:backend & npm run dev:frontend",
+    "lint": "npm run lint --workspace=backend && npm run lint --workspace=frontend",
+    "lint:fix": "npm run lint:fix --workspace=backend && npm run lint:fix --workspace=frontend",
+    "format": "npm run format --workspace=backend && npm run format --workspace=frontend",
+    "format:check": "npm run format:check --workspace=backend && npm run format:check --workspace=frontend",
+    "prepare": "husky install"
+  },
+  "keywords": [
+    "ai",
+    "education",
+    "assessment",
+    "monorepo"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0"
+  }
+}

@@ -1,0 +1,74 @@
+.assignment-page {
+  padding: 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.assignment-header {
+  margin-bottom: 30px;
+}
+
+.assignment-header h1 {
+  font-size: 32px;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+
+.assignment-header p {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.assignment-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.assignment-info,
+.assignment-questions {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.assignment-info h2,
+.assignment-questions h2 {
+  font-size: 20px;
+  color: #1f2937;
+  margin-bottom: 16px;
+}
+
+.placeholder-text {
+  color: #9ca3af;
+  font-style: italic;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.assignment-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
