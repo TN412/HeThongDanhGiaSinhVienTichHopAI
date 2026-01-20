@@ -1,0 +1,161 @@
+/* Timeline Chart Styles */
+
+.timeline-chart {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.chart-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #1f2937;
+}
+
+.chart-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.anomaly-count {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.chart-container {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 200px;
+  padding: 10px 0;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.chart-bar-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 40px;
+}
+
+.chart-bar {
+  width: 100%;
+  min-height: 4px;
+  background: linear-gradient(to top, #3b82f6, #60a5fa);
+  border-radius: 4px 4px 0 0;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 4px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.chart-bar:hover {
+  background: linear-gradient(to top, #2563eb, #3b82f6);
+  transform: translateY(-2px);
+}
+
+.chart-bar.anomaly {
+  background: linear-gradient(to top, #ef4444, #f87171);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.bar-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+}
+
+.anomaly-icon {
+  position: absolute;
+  top: -20px;
+  font-size: 16px;
+  animation: bounce 1s infinite;
+}
+
+@keyframes bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.chart-label {
+  margin-top: 8px;
+  text-align: center;
+}
+
+.time-label {
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+.timeline-chart-empty {
+  background: #f9fafb;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  padding: 40px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.anomaly-explanations {
+  margin-top: 24px;
+  padding: 16px;
+  background: #fef2f2;
+  border-left: 4px solid #ef4444;
+  border-radius: 8px;
+}
+
+.anomaly-explanations h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: #dc2626;
+}
+
+.anomaly-explanations ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.anomaly-explanations li {
+  margin: 6px 0;
+  color: #7f1d1d;
+  font-size: 14px;
+}
+
+.anomaly-note {
+  margin: 12px 0 0 0;
+  padding: 8px;
+  background: white;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #6b7280;
+}

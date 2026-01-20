@@ -15,7 +15,7 @@ import './GradingInterface.css';
  * - POST /api/submission/:id/grade (instructor only)
  * - Auto-save draft grades
  */
-function GradingInterface({ submissionId, onGradingComplete }) {
+function GradingInterface({ submissionId, onGradingComplete = null }) {
   const [submission, setSubmission] = useState(null);
   const [assignment, setAssignment] = useState(null);
   const [essayQuestions, setEssayQuestions] = useState([]);
@@ -45,7 +45,11 @@ function GradingInterface({ submissionId, onGradingComplete }) {
       setSubmission(subData);
 
       // Get assignment details
-      const assignmentRes = await api.get(`/assignment/${subData.assignmentId}`);
+      // assignmentId can be a string ID or populated object
+      const assignmentId =
+        typeof subData.assignmentId === 'object' ? subData.assignmentId._id : subData.assignmentId;
+
+      const assignmentRes = await api.get(`/assignment/${assignmentId}`);
       const assignmentData = assignmentRes.data.assignment;
       setAssignment(assignmentData);
 
@@ -381,10 +385,6 @@ function GradingInterface({ submissionId, onGradingComplete }) {
 GradingInterface.propTypes = {
   submissionId: PropTypes.string.isRequired,
   onGradingComplete: PropTypes.func,
-};
-
-GradingInterface.defaultProps = {
-  onGradingComplete: null,
 };
 
 export default GradingInterface;

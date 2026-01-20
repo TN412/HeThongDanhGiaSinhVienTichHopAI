@@ -584,20 +584,151 @@ router.get('/instructor/all', auth.instructor, async (req, res) => {
 });
 
 /**
+ * Helper: Batch grade multiple essay questions at once
+ */
+async function batchGradeSubmission(req, res, submissionId, grades) {
+  try {
+    // Find submission
+    const submission = await AssignmentSubmission.findById(submissionId).populate('assignmentId');
+    if (!submission) {
+      return res.status(404).json({
+        success: false,
+        error: 'Submission not found',
+      });
+    }
+
+    // Verify instructor owns the assignment
+    if (submission.assignmentId.instructorId.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'Not authorized to grade this submission',
+      });
+    }
+
+    const assignment = submission.assignmentId;
+    let gradedCount = 0;
+
+    // Grade each question
+    for (const gradeData of grades) {
+      const { questionId, pointsEarned, feedback } = gradeData;
+
+      // Find the answer
+      const answerIndex = submission.answers.findIndex(a => a.questionId.toString() === questionId);
+
+      if (answerIndex === -1) {
+        console.warn(`⚠️ Answer not found for question ${questionId}`);
+        continue;
+      }
+
+      // Find the question to validate points
+      const question = assignment.questions.id(questionId);
+      if (!question) {
+        console.warn(`⚠️ Question ${questionId} not found in assignment`);
+        continue;
+      }
+
+      // Validate points
+      const points = parseFloat(pointsEarned) || 0;
+      if (points > question.points) {
+        console.warn(
+          `⚠️ Points ${points} exceed max ${question.points} for question ${questionId}`
+        );
+        continue;
+      }
+
+      // Update the answer
+      submission.answers[answerIndex].pointsEarned = points;
+      submission.answers[answerIndex].feedback = feedback || '';
+      submission.answers[answerIndex].gradedAt = new Date();
+      submission.answers[answerIndex].gradedBy = req.user.id;
+
+      gradedCount++;
+    }
+
+    // Recalculate total score
+    submission.totalScore = submission.answers.reduce(
+      (sum, answer) => sum + (answer.pointsEarned || 0),
+      0
+    );
+
+    // Check if all essay questions are graded
+    const allEssayGraded = submission.answers.every(answer => {
+      const q = assignment.questions.id(answer.questionId);
+      return q?.type !== 'essay' || answer.pointsEarned !== undefined;
+    });
+
+    // Recalculate final score if all essays graded
+    if (allEssayGraded) {
+      const AI_SKILL_SCORE_WEIGHT = parseFloat(process.env.AI_SKILL_SCORE_WEIGHT) || 0.3;
+      const contentPercentage = (submission.totalScore / assignment.totalPoints) * 100;
+      const contentScoreScale10 = (contentPercentage / 100) * 10;
+      const aiSkillScoreScale10 = submission.aiSkillScore || 0;
+
+      let finalScorePercentage;
+      if (AI_SKILL_SCORE_WEIGHT === 0) {
+        finalScorePercentage = contentPercentage;
+      } else {
+        const aiSkillPercentage = (aiSkillScoreScale10 / 10) * 100;
+        finalScorePercentage =
+          contentPercentage * (1 - AI_SKILL_SCORE_WEIGHT) +
+          aiSkillPercentage * AI_SKILL_SCORE_WEIGHT;
+      }
+
+      submission.finalScore = (finalScorePercentage / 100) * 10;
+      submission.contentScore = contentScoreScale10;
+      submission.status = 'graded';
+
+      console.log(
+        `✅ Batch graded ${gradedCount} questions - Final: ${submission.finalScore.toFixed(2)}/10`
+      );
+    } else {
+      console.log(`⏳ Batch graded ${gradedCount} questions - Waiting for more`);
+    }
+
+    await submission.save();
+
+    return res.json({
+      success: true,
+      message: `${gradedCount} question(s) graded successfully`,
+      submission: {
+        _id: submission._id,
+        totalScore: submission.totalScore,
+        finalScore: submission.finalScore,
+        status: submission.status,
+        gradedCount,
+      },
+    });
+  } catch (error) {
+    console.error('[Batch Grade] Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to batch grade submission',
+    });
+  }
+}
+
+/**
  * POST /api/submission/:id/grade
  * Grade essay questions manually (instructor only)
- * Body: { questionId, points, feedback }
+ * Body: { questionId, points, feedback } OR { grades: [{ questionId, pointsEarned, feedback }] }
  */
 router.post('/:id/grade', auth.instructor, async (req, res) => {
   try {
     const submissionId = req.params.id;
-    const { questionId, points, feedback } = req.body;
+    const { questionId, points, feedback, grades } = req.body;
 
+    // Support both single grade and batch grades
+    if (grades && Array.isArray(grades)) {
+      // Batch grading mode
+      return await batchGradeSubmission(req, res, submissionId, grades);
+    }
+
+    // Single question grading mode (legacy)
     // Validate input
     if (!questionId) {
       return res.status(400).json({
         success: false,
-        error: 'questionId is required',
+        error: 'questionId is required (or use grades array for batch)',
       });
     }
 

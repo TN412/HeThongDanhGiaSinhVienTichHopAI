@@ -1,0 +1,140 @@
+/* Rubric Score Card Styles */
+
+.rubric-score-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.card-title {
+  margin: 0 0 24px 0;
+  font-size: 20px;
+  color: #1f2937;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 12px;
+}
+
+.criteria-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.rubric-criterion {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  transition: all 0.3s ease;
+}
+
+.rubric-criterion:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.criterion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.criterion-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.criterion-icon {
+  font-size: 24px;
+}
+
+.criterion-title h4 {
+  margin: 0;
+  font-size: 16px;
+  color: #1f2937;
+}
+
+.criterion-level-badge {
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+}
+
+.level-indicator {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  height: 8px;
+}
+
+.level-bar {
+  flex: 1;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.level-bar.filled {
+  animation: fillBar 0.5s ease-out;
+}
+
+@keyframes fillBar {
+  from {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.criterion-description {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #4b5563;
+  background: white;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 3px solid #3b82f6;
+}
+
+.rubric-legend {
+  background: #f0f9ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.rubric-legend h5 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #1e40af;
+}
+
+.legend-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: inline-block;
+}

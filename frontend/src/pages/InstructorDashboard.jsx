@@ -32,6 +32,7 @@ function InstructorDashboard() {
   // Filters
   const [selectedAssignment, setSelectedAssignment] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   // UI State
@@ -47,7 +48,7 @@ function InstructorDashboard() {
   // Apply filters when data or filters change
   useEffect(() => {
     applyFilters();
-  }, [submissions, selectedAssignment, statusFilter, searchTerm]);
+  }, [submissions, selectedAssignment, statusFilter, typeFilter, searchTerm]);
 
   // Load all dashboard data
   const loadDashboardData = async () => {
@@ -84,20 +85,10 @@ function InstructorDashboard() {
 
   // Calculate statistics
   const calculateStats = (assignmentsData, submissionsData) => {
-    const submittedSubmissions = submissionsData.filter(s => s.status === 'submitted');
+    const submittedSubmissions = submissionsData.filter(s => s.status === 'submitted' || s.status === 'graded');
 
-    // Count pending essay grading (submissions with essay questions that haven't been graded)
-    const pendingEssayGrading = submissionsData.filter(s => {
-      if (s.status !== 'submitted' && s.status !== 'pending_grading') return false;
-
-      // Check if has essay questions that need grading
-      const hasUnGradedEssay = s.answers?.some(answer => {
-        const question = s.assignment?.questions?.find(q => q._id === answer.questionId);
-        return question?.type === 'essay' && answer.pointsEarned === undefined;
-      });
-
-      return hasUnGradedEssay;
-    }).length;
+    // Count pending essay grading (submissions with status 'pending_grading')
+    const pendingEssayGrading = submissionsData.filter(s => s.status === 'pending_grading').length;
 
     // Calculate average AI skill score
     const aiSkillScores = submittedSubmissions
@@ -131,6 +122,27 @@ function InstructorDashboard() {
       filtered = filtered.filter(s => s.status === statusFilter);
     }
 
+    // Filter by type (multiple-choice vs essay)
+    if (typeFilter !== 'all') {
+      filtered = filtered.filter(s => {
+        const assignment = s.assignmentId || s.assignment;
+        // Check assignment questionType or if it has essay questions
+        if (typeFilter === 'essay') {
+          return (
+            assignment?.questionType === 'essay' ||
+            assignment?.questionType === 'mixed' ||
+            assignment?.questions?.some(q => q.type === 'essay')
+          );
+        } else if (typeFilter === 'multiple-choice') {
+          return (
+            assignment?.questionType === 'multiple-choice' &&
+            !assignment?.questions?.some(q => q.type === 'essay')
+          );
+        }
+        return true;
+      });
+    }
+
     // Filter by search term (student name or email)
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
@@ -161,6 +173,11 @@ function InstructorDashboard() {
     navigate(`/instructor/ai-logs/${submissionId}`);
   };
 
+  // View comprehensive AI assessment report
+  const handleViewAIAssessment = submissionId => {
+    navigate(`/instructor/assessment/${submissionId}`);
+  };
+
   // Grade essay submission
   const handleGradeEssay = submissionId => {
     navigate(`/instructor/grade/${submissionId}`);
@@ -185,7 +202,7 @@ function InstructorDashboard() {
       const rows = filteredSubmissions.map(s => [
         s.studentName || 'N/A',
         s.studentEmail || 'N/A',
-        s.assignment?.title || 'N/A',
+        (s.assignmentId || s.assignment)?.title || 'N/A',
         s.status || 'N/A',
         s.status === 'submitted' ? `${(s.contentScore || 0).toFixed(1)}/10` : 'N/A',
         s.status === 'submitted' ? (s.aiSkillScore || 0).toFixed(1) : 'N/A',
@@ -365,6 +382,15 @@ function InstructorDashboard() {
             </select>
           </div>
 
+          <div className="filter-group">
+            <label>Loại Bài Tập:</label>
+            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+              <option value="all">Tất Cả Loại</option>
+              <option value="multiple-choice">Trắc Nghiệm</option>
+              <option value="essay">Tự Luận / Hỗn Hợp</option>
+            </select>
+          </div>
+
           <div className="filter-group search-group">
             <label>Tìm Kiếm:</label>
             <input
@@ -405,14 +431,18 @@ function InstructorDashboard() {
               </thead>
               <tbody>
                 {filteredSubmissions.map(submission => {
-                  const assignment = submission.assignment;
+                  const assignment = submission.assignmentId || submission.assignment;
+
+                  // Show grade button if:
+                  // 1. Status is submitted/pending_grading/graded (allow re-grading)
+                  // 2. Has essay questions OR assignment has essay type
                   const hasEssayToGrade =
                     (submission.status === 'pending_grading' ||
-                      submission.status === 'submitted') &&
-                    submission.answers?.some(a => {
-                      const q = assignment?.questions?.find(qu => qu._id === a.questionId);
-                      return q?.type === 'essay' && a.pointsEarned === undefined;
-                    });
+                      submission.status === 'submitted' ||
+                      submission.status === 'graded') &&
+                    (assignment?.questionType === 'essay' ||
+                      assignment?.questionType === 'mixed' ||
+                      assignment?.questions?.some(q => q.type === 'essay'));
 
                   return (
                     <tr key={submission._id}>
@@ -498,10 +528,11 @@ function InstructorDashboard() {
 
                       <td>
                         <div className="ai-usage-cell">
-                          {submission.aiInteractionSummary ? (
+                          {submission.aiInteractionSummary &&
+                          submission.aiInteractionSummary.totalPrompts > 0 ? (
                             <>
                               <span className="prompts-count">
-                                🪙 {submission.aiInteractionSummary.totalPrompts || 0} câu hỏi
+                                💬 {submission.aiInteractionSummary.totalPrompts || 0} prompts
                               </span>
                               {submission.aiInteractionSummary.independenceLevel !== undefined && (
                                 <span
@@ -519,6 +550,7 @@ function InstructorDashboard() {
                                   % độc lập
                                 </span>
                               )}
+                              <div className="ai-report-hint">🧠 Có báo cáo AI</div>
                             </>
                           ) : (
                             <span className="no-ai">Không dùng AI</span>
@@ -564,11 +596,25 @@ function InstructorDashboard() {
                             📊
                           </button>
 
-                          {hasEssayToGrade && (
+                          {(submission.status === 'submitted' ||
+                            submission.status === 'graded') && (
+                            <button
+                              onClick={() => handleViewAIAssessment(submission._id)}
+                              className="action-btn assessment-btn"
+                              title="📊 Xem Đánh Giá AI Toàn Diện (WISDOM, Dependency, Rubric)"
+                            >
+                              🧠
+                            </button>
+                          )}
+
+                          {/* Show grade button for all submitted/pending/graded submissions */}
+                          {(submission.status === 'submitted' ||
+                            submission.status === 'pending_grading' ||
+                            submission.status === 'graded') && (
                             <button
                               onClick={() => handleGradeEssay(submission._id)}
                               className="action-btn grade-btn"
-                              title="Chấm câu tự luận"
+                              title="✍️ Chấm Điểm / Xem Bài Làm Chi Tiết"
                             >
                               ✍️
                             </button>

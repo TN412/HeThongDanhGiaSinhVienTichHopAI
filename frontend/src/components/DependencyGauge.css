@@ -1,0 +1,18 @@
+/* Dependency Gauge Styles */
+
+.dependency-gauge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.gauge-progress {
+  transition:
+    stroke-dashoffset 1s ease-in-out,
+    stroke 0.3s ease;
+}
+
+.dependency-gauge:hover .gauge-progress {
+  filter: brightness(1.1);
+}

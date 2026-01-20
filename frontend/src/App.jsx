@@ -20,6 +20,7 @@ import SubmissionPage from './pages/SubmissionPage';
 import ReviewPage from './pages/ReviewPage';
 import AssignmentView from './pages/AssignmentView';
 import MySubmissionsPage from './pages/MySubmissionsPage';
+import AIAssessmentReport from './pages/AIAssessmentReport';
 import './App.css';
 
 // Component để redirect legacy routes
@@ -101,6 +102,14 @@ function App() {
                 element={
                   <ProtectedRoute requiredRole="instructor">
                     <GradingPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/instructor/assessment/:submissionId"
+                element={
+                  <ProtectedRoute requiredRole="instructor">
+                    <AIAssessmentReport />
                   </ProtectedRoute>
                 }
               />

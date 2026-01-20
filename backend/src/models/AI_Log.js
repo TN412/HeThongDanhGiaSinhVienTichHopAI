@@ -25,6 +25,12 @@ const aiLogSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       required: false, // Optional - may be general question not tied to specific question
     },
+    questionText: {
+      type: String,
+      required: false, // Original question text for copy-paste detection
+      trim: true,
+      maxlength: [2000, 'Question text cannot exceed 2000 characters'],
+    },
     prompt: {
       type: String,
       required: [true, 'Prompt is required'],
@@ -36,19 +42,74 @@ const aiLogSchema = new mongoose.Schema(
       required: [true, 'Response is required'],
       maxlength: [10000, 'Response cannot exceed 10000 characters'],
     },
+    // 🆕 ADVANCED CLASSIFICATION
     promptType: {
       type: String,
       enum: {
-        values: ['question', 'clarification', 'hint', 'explanation', 'other'],
+        values: [
+          'clarifying',
+          'expanding',
+          'debugging',
+          'code_generation',
+          'design_support',
+          'theoretical_explanation',
+          'general',
+          // Legacy support
+          'question',
+          'clarification',
+          'hint',
+          'explanation',
+          'other',
+        ],
         message: '{VALUE} is not a valid prompt type',
       },
       required: [true, 'Prompt type is required'],
-      default: 'question',
+      default: 'general',
     },
     contextProvided: {
       type: Boolean,
       default: false,
       required: true,
+    },
+    // 🆕 ADVANCED QUALITY ASSESSMENT
+    advancedQualityAssessment: {
+      score: {
+        type: Number,
+        min: 1,
+        max: 5,
+        default: null, // Will be computed by prompt_classifier
+      },
+      level: {
+        type: String,
+        enum: ['Xuất sắc', 'Tốt', 'Đạt', 'Yếu', 'Kém', null],
+        default: null,
+      },
+      factors: {
+        hasGoal: { type: Boolean, default: false },
+        hasConstraints: { type: Boolean, default: false },
+        hasContext: { type: Boolean, default: false },
+        hasIteration: { type: Boolean, default: false },
+        showsThinking: { type: Boolean, default: false },
+        isSpecific: { type: Boolean, default: false },
+      },
+      details: {
+        type: String,
+        default: null,
+      },
+    },
+    // 🆕 WORKFLOW STAGE (for project-based assignments)
+    workflowStage: {
+      type: String,
+      enum: [
+        'requirements_analysis',
+        'system_design',
+        'implementation',
+        'algorithm_optimization',
+        'documentation_research',
+        'reflection',
+        'general',
+      ],
+      default: 'general',
     },
     timestamp: {
       type: Date,
@@ -100,6 +161,22 @@ const aiLogSchema = new mongoose.Schema(
     isHelpful: {
       type: Boolean,
       default: null, // null until student feedback
+    },
+    // 🆕 MUTATION TRACKING (for iteration detection)
+    mutationMetadata: {
+      isRefinement: { type: Boolean, default: false },
+      isDuplicate: { type: Boolean, default: false },
+      previousPromptId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'AI_Log',
+        default: null,
+      },
+      similarity: { type: Number, default: null }, // 0-1
+      mutationType: {
+        type: String,
+        enum: ['expansion', 'clarification', 'constraint_addition', 'refinement', null],
+        default: null,
+      },
     },
     // Instructor labeling for ML training dataset
     instructorLabel: {
@@ -159,6 +236,12 @@ aiLogSchema.index({ timestamp: -1 });
 aiLogSchema.index({ assignmentId: 1, timestamp: 1 });
 aiLogSchema.index({ studentId: 1, timestamp: 1 });
 
+// Indexes for advanced assessment features
+aiLogSchema.index({ workflowStage: 1 });
+aiLogSchema.index({ 'advancedQualityAssessment.level': 1 });
+aiLogSchema.index({ 'mutationMetadata.isRefinement': 1 });
+aiLogSchema.index({ 'mutationMetadata.previousPromptId': 1 });
+
 // Pre-save hook to calculate total tokens
 aiLogSchema.pre('save', function (next) {
   if (this.promptTokens !== undefined && this.completionTokens !== undefined) {
@@ -185,7 +268,10 @@ aiLogSchema.virtual('responseLength').get(function () {
   return this.response ? this.response.length : 0;
 });
 
-// Static method to classify prompt type automatically
+// Import prompt classifier for advanced analysis
+const promptClassifier = require('../utils/prompt_classifier');
+
+// Static method to classify prompt type automatically (legacy - kept for backward compatibility)
 aiLogSchema.statics.classifyPromptType = function (prompt) {
   const lowerPrompt = prompt.toLowerCase().trim();
 
@@ -211,6 +297,144 @@ aiLogSchema.statics.classifyPromptType = function (prompt) {
   }
 
   return 'other';
+};
+
+// Static method to create and save log with advanced classification
+aiLogSchema.statics.createWithClassification = async function (logData) {
+  try {
+    // Classify prompt type using advanced classifier
+    const classifiedType = promptClassifier.classifyPromptType(logData.prompt);
+
+    // Check for copy-paste pattern by analyzing previous logs
+    let isCopyPastePattern = false;
+    if (logData.submissionId) {
+      const recentLogs = await this.find({
+        submissionId: logData.submissionId,
+        _id: { $ne: logData._id },
+      })
+        .sort({ timestamp: -1 })
+        .limit(3)
+        .select('prompt');
+
+      // Detect if current and previous prompts are all long and similar length (copy-paste pattern)
+      if (recentLogs.length >= 2) {
+        const currentLength = logData.prompt.length;
+        const lengths = recentLogs.map(log => log.prompt.length);
+        const allLong = currentLength > 100 && lengths.every(len => len > 100);
+        const similarLengths = lengths.every(len => Math.abs(len - currentLength) < 50);
+        isCopyPastePattern = allLong && similarLengths;
+      }
+    }
+
+    // Assess prompt quality (include questionText for similarity detection)
+    const qualityAssessment = promptClassifier.assessPromptQuality(logData.prompt, {
+      hasContext: logData.contextProvided || false,
+      hasIteration: false, // Will be updated by mutation detection
+      isCopyPastePattern: isCopyPastePattern,
+      questionText: logData.questionText, // CRITICAL: Compare with original question
+    });
+
+    // Check for mutations (refinements of previous prompts)
+    let mutationData = {
+      isRefinement: false,
+      isDuplicate: false,
+      previousPromptId: null,
+      similarity: null,
+      mutationType: null,
+    };
+
+    if (logData.submissionId) {
+      // Find previous logs from same submission
+      const previousLogs = await this.find({
+        submissionId: logData.submissionId,
+        questionId: logData.questionId,
+        _id: { $ne: logData._id },
+      })
+        .sort({ timestamp: -1 })
+        .limit(5)
+        .select('prompt _id');
+
+      if (previousLogs.length > 0) {
+        // Detect mutations
+        const mutations = promptClassifier.detectPromptMutations(
+          logData.prompt,
+          previousLogs.map(log => ({ id: log._id.toString(), prompt: log.prompt }))
+        );
+
+        if (mutations.length > 0) {
+          const latestMutation = mutations[0];
+          mutationData = {
+            isRefinement: latestMutation.mutationType !== 'duplicate',
+            isDuplicate: latestMutation.mutationType === 'duplicate',
+            previousPromptId: latestMutation.previousId,
+            similarity: latestMutation.similarity,
+            mutationType: latestMutation.mutationType,
+          };
+
+          // Update quality assessment to include iteration
+          if (mutationData.isRefinement) {
+            qualityAssessment.factors.hasIteration = true;
+            qualityAssessment.score = Math.min(5, qualityAssessment.score + 0.5); // Bonus for iteration
+          }
+        }
+      }
+    }
+
+    // Create log with enhanced fields
+    const log = new this({
+      ...logData,
+      promptType: classifiedType,
+      advancedQualityAssessment: {
+        score: qualityAssessment.score,
+        level: qualityAssessment.level,
+        factors: qualityAssessment.factors,
+        details: qualityAssessment.details,
+      },
+      mutationMetadata: mutationData,
+      // Keep legacy qualityScore for backward compatibility
+      qualityScore: qualityAssessment.score * 20, // Convert 1-5 to 0-100
+    });
+
+    await log.save();
+    return log;
+  } catch (error) {
+    console.error('Error creating log with classification:', error);
+    // Fallback to basic save if classification fails
+    const log = new this(logData);
+    await log.save();
+    return log;
+  }
+};
+
+// Static method to get assessment data for a submission
+aiLogSchema.statics.getAssessmentData = async function (submissionId) {
+  try {
+    const logs = await this.find({ submissionId }).sort({ timestamp: 1 }).lean();
+
+    if (!logs || logs.length === 0) {
+      return null;
+    }
+
+    // Return structured data for assessment
+    return {
+      logs,
+      totalCount: logs.length,
+      timeRange: {
+        start: logs[0].timestamp,
+        end: logs[logs.length - 1].timestamp,
+      },
+      promptTypes: logs.map(log => log.promptType),
+      qualityScores: logs.map(log => log.advancedQualityAssessment?.score || 0),
+      workflowStages: logs.map(log => log.workflowStage),
+      refinements: logs.filter(log => log.mutationMetadata?.isRefinement).length,
+      duplicates: logs.filter(log => log.mutationMetadata?.isDuplicate).length,
+      avgTokens: logs.reduce((sum, log) => sum + (log.totalTokens || 0), 0) / logs.length,
+      avgResponseTime: logs.reduce((sum, log) => sum + (log.responseTime || 0), 0) / logs.length,
+    };
+  } catch (error) {
+    console.error('Error getting assessment data:', error);
+    return null;
+  }
 };
 
 // Static method to find logs by submission

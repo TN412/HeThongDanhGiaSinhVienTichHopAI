@@ -1,0 +1,149 @@
+/* Prompt Quality List Styles */
+
+.prompt-quality-list {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.tab {
+  flex: 1;
+  padding: 16px 24px;
+  background: #f9fafb;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.tab:hover {
+  background: #f3f4f6;
+}
+
+.tab.active {
+  background: white;
+  color: #1f2937;
+  border-bottom: 3px solid #3b82f6;
+}
+
+.prompts-container {
+  padding: 20px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.prompt-card {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  transition: all 0.3s ease;
+}
+
+.prompt-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.prompt-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.prompt-rank {
+  font-size: 20px;
+  font-weight: bold;
+  color: #3b82f6;
+  min-width: 40px;
+}
+
+.prompt-quality-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.prompt-time {
+  margin-left: auto;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.prompt-text {
+  background: white;
+  border-left: 4px solid #3b82f6;
+  padding: 12px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1f2937;
+  border-radius: 4px;
+}
+
+.prompt-factors h5 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.factors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.factor {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.factor.pass {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.factor.fail {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #9ca3af;
+}
+
+/* Scrollbar styling */
+.prompts-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.prompts-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.prompts-container::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 4px;
+}
+
+.prompts-container::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}

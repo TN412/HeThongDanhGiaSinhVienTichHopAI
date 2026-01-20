@@ -7,6 +7,7 @@ const authRoutes = require('./auth');
 const assignmentRoutes = require('./assignment');
 const submissionRoutes = require('./submission');
 const aiRoutes = require('./ai');
+const aiAssessmentRoutes = require('./ai_assessment');
 const analyticsRoutes = require('./analytics');
 const logsRoutes = require('./logs');
 const healthRoutes = require('./health');
@@ -43,6 +44,9 @@ router.use('/submission', submissionRoutes);
 
 // Mount AI routes
 router.use('/ai', aiRoutes);
+
+// Mount AI assessment routes (comprehensive AI usage analysis)
+router.use('/ai-assessment', aiAssessmentRoutes);
 
 // Mount logs routes (for prompt labeling and ML training data export)
 router.use('/logs', logsRoutes);

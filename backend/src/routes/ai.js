@@ -270,9 +270,14 @@ router.post('/chat', aiChatLimiter, auth.student, async (req, res) => {
     }
 
     // ============================================
-    // 5. Build Simple System Prompt
+    // 5. Build Socratic System Prompt
     // ============================================
-    let systemPrompt = 'You are a helpful tutor.';
+    let systemPrompt = `You are a Socratic tutor helping a student with an assignment.
+Your goal is to guide the student to the answer without giving it directly.
+- Ask clarifying questions to help the student articulate their confusion.
+- Provide hints and analogies rather than solutions.
+- Encourage critical thinking and independent problem-solving.
+- If the student asks for the answer, politely refuse and offer a hint instead.`;
 
     // Add question context if available
     if (questionId) {
@@ -292,7 +297,7 @@ router.post('/chat', aiChatLimiter, auth.student, async (req, res) => {
     if (context && context.trim().length > 0) {
       // Truncate context to max 8000 chars
       const truncatedContext = context.substring(0, 8000);
-      userMessage = `Context: ${truncatedContext}\n\nQuestion: ${prompt}`;
+      userMessage = `[Bối cảnh: ${truncatedContext}]\n\nCâu hỏi: ${prompt}`;
     }
 
     // ============================================
@@ -308,13 +313,6 @@ router.post('/chat', aiChatLimiter, auth.student, async (req, res) => {
     // ============================================
     // 7. Call OpenAI API
     // ============================================
-    if (!openai) {
-      return res.status(500).json({
-        success: false,
-        error: 'AI service is not configured. Please set OPENAI_API_KEY in environment variables.',
-      });
-    }
-
     let aiResponse;
     const openaiStartTime = Date.now();
 
@@ -324,13 +322,6 @@ router.post('/chat', aiChatLimiter, auth.student, async (req, res) => {
       const model = isAzure
         ? process.env.AZURE_OPENAI_DEPLOYMENT || 'o4-mini'
         : process.env.OPENAI_MODEL || 'gpt-4o-mini';
-
-      // Build user message with optional context
-      let userMessage = prompt;
-      if (context && context.trim().length > 0) {
-        const truncatedContext = context.substring(0, 8000);
-        userMessage = `[Bối cảnh: ${truncatedContext}]\n\nCâu hỏi: ${prompt}`;
-      }
 
       console.log(`🔵 Calling OpenAI with model: ${model}`);
       console.log(`🔵 System prompt length: ${systemPrompt.length} chars`);
@@ -384,23 +375,38 @@ router.post('/chat', aiChatLimiter, auth.student, async (req, res) => {
 
     // ============================================
     // 9. CRITICAL: Log Interaction BEFORE Returning
+    // Now using createWithClassification for advanced assessment
     // ============================================
-    await AI_Log.create({
+
+    // Get question text for copy-paste detection
+    let questionText = null;
+    if (questionId) {
+      const question = assignment.questions.id(questionId);
+      if (question) {
+        questionText = question.question; // Original question text
+      }
+    }
+
+    await AI_Log.createWithClassification({
       submissionId,
       assignmentId: assignment._id,
       studentId: req.user.id,
       questionId: questionId || null,
+      questionText: questionText, // CRITICAL: Store original question for comparison
       prompt: prompt.trim(),
       response: responseMessage,
-      promptType,
       contextProvided: !!context && context.trim().length > 0,
       timestamp: new Date(),
       promptTokens: aiResponse.usage.prompt_tokens,
       completionTokens: aiResponse.usage.completion_tokens,
       responseTime,
+      model: aiResponse.model || 'gpt-4o-mini',
+      temperature: 0.7,
     });
 
-    console.log(`✅ AI interaction logged for submission ${submissionId}`);
+    console.log(
+      `✅ AI interaction logged with advanced classification for submission ${submissionId}`
+    );
 
     // ============================================
     // 10. Increment AI Interaction Count
