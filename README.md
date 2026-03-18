@@ -1,123 +1,124 @@
 # Hệ Thống Đánh Giá Sinh Viên Tích Hợp AI (AI-Integrated Student Assessment System)
 
-He thong tao bai tap va danh gia nang luc sinh vien tich hop AI cho dai hoc/cao dang. Du an danh gia dong thoi 2 khia canh:
+Đây là hệ thống tạo bài tập và đánh giá năng lực sinh viên có tích hợp AI dành cho bối cảnh đại học, cao đẳng.
 
-- Nang luc chuyen mon (ket qua bai lam)
-- Nang luc su dung AI (chat luong prompt, tinh doc lap, kha nang tu duy)
+Dự án đánh giá đồng thời hai khía cạnh:
+- Năng lực chuyên môn (kết quả bài làm)
+- Năng lực sử dụng AI (chất lượng prompt, mức độ độc lập, khả năng tư duy)
 
-Muc tieu: cho phep sinh vien dung AI mot cach co kiem soat, va giang vien co dashboard de theo doi chat luong hoc tap thay vi chi xem diem dung/sai.
+Mục tiêu chính: cho phép sinh viên sử dụng AI một cách có kiểm soát, đồng thời giúp giảng viên theo dõi chất lượng học tập toàn diện thay vì chỉ xem đúng/sai.
 
-## 1. Gia Tri San Pham
+## 1. Giá Trị Sản Phẩm
 
-- Tu dong tao de bai tu tai lieu hoc tap (PDF, DOCX, TXT)
-- Sinh vien lam bai co AI tutor theo ngu canh cau hoi
-- Luu toan bo tuong tac AI de danh gia ky nang prompt
-- Cham diem ket hop noi dung + ky nang su dung AI
-- Dashboard phan tich cho giang vien, co logs va bao cao chi tiet
+- Tự động tạo đề bài từ tài liệu học tập (PDF, DOCX, TXT)
+- Sinh viên làm bài có AI tutor theo ngữ cảnh câu hỏi
+- Lưu toàn bộ tương tác AI để đánh giá kỹ năng prompt
+- Chấm điểm kết hợp nội dung + kỹ năng sử dụng AI
+- Dashboard phân tích cho giảng viên với logs và báo cáo chi tiết
 
-Cong thuc diem tong:
+Công thức điểm tổng:
 
 Final Score = Content Score x 70% + AI Skill Score x 30%
 
-## 2. Kien Truc Tong The
+## 2. Kiến Trúc Tổng Thể
 
 - Frontend: React 18 + Vite + React Router
 - Backend: Node.js + Express
 - Database: MongoDB Atlas + Mongoose
-- AI Service: OpenAI API hoac Azure OpenAI
-- File Storage: Azure Blob Storage (luu tai lieu nguon)
+- AI Service: OpenAI API hoặc Azure OpenAI
+- File Storage: Azure Blob Storage (lưu tài liệu nguồn)
 - Auth: JWT access token + refresh token cookie
 - Monitoring: Application Insights
 
-Kieu trien khai: monorepo voi 2 workspace backend va frontend.
+Kiểu triển khai: monorepo với 2 workspace backend và frontend.
 
-## 3. Chuc Nang Day Du Theo Vai Tro
+## 3. Chức Năng Theo Vai Trò
 
-### 3.1 Giang Vien
+### 3.1. Giảng viên
 
-1. Tao bai tap thu cong hoac bang AI
-- Upload tai lieu PDF/DOCX/TXT
-- Chon loai cau hoi: multiple-choice, essay, mixed
-- Chon so luong cau hoi va do kho
-- AI sinh cau hoi + dap an/rubric + giai thich
-- Giang vien review, sua va publish
+1. Tạo bài tập thủ công hoặc bằng AI
+- Upload tài liệu PDF/DOCX/TXT
+- Chọn loại câu hỏi: multiple-choice, essay, mixed
+- Chọn số lượng câu hỏi và độ khó
+- AI sinh câu hỏi + đáp án/rubric + giải thích
+- Giảng viên review, sửa và publish
 
-2. Quan ly vong doi bai tap
-- Tao draft
-- Chinh sua draft
-- Publish cho sinh vien
-- Regenerate cau hoi tu cung tai lieu
-- Archive khi ket thuc hoc ky
+2. Quản lý vòng đời bài tập
+- Tạo draft
+- Chỉnh sửa draft
+- Publish cho sinh viên
+- Regenerate câu hỏi từ cùng tài liệu
+- Archive khi kết thúc học kỳ
 
-3. Dashboard ket qua
-- Danh sach tat ca submissions
-- Loc theo bai tap, trang thai, sinh vien
-- Xem diem noi dung, AI skill, final
-- Xem thong ke su dung AI tren tung bai nop
+3. Dashboard kết quả
+- Danh sách tất cả submissions
+- Lọc theo bài tập, trạng thái, sinh viên
+- Xem điểm nội dung, AI skill, final
+- Xem thống kê sử dụng AI trên từng bài nộp
 
-4. Cham bai tu luan
-- Ho tro cham theo rubric
-- Cap nhat diem tung cau
-- Luu nhan xet tong quan
+4. Chấm bài tự luận
+- Hỗ trợ chấm theo rubric
+- Cập nhật điểm từng câu
+- Lưu nhận xét tổng quan
 
-5. Xem va khai thac AI Logs
-- Xem timeline prompt/response cua sinh vien
-- Xem prompt quality va metadata token
-- Label prompt tot/xau de huan luyen mo hinh sau nay
+5. Xem và khai thác AI logs
+- Xem timeline prompt/response của sinh viên
+- Xem prompt quality và metadata token
+- Label prompt tốt/xấu để huấn luyện mô hình sau này
 - Export logs ra CSV/JSON
 
-### 3.2 Sinh Vien
+### 3.2. Sinh viên
 
-1. Xem danh sach bai tap duoc publish
-- Loc va tim kiem bai tap
-- Xem deadline, so cau hoi, loai bai
+1. Xem danh sách bài tập đã publish
+- Lọc và tìm kiếm bài tập
+- Xem deadline, số câu hỏi, loại bài
 
-2. Lam bai online
-- Tao submission voi trang thai draft
-- Tra loi tung cau
-- Auto-save dinh ky
-- Nop bai khi hoan tat
+2. Làm bài online
+- Tạo submission với trạng thái draft
+- Trả lời từng câu
+- Auto-save định kỳ
+- Nộp bài khi hoàn tất
 
-3. Ho tro AI trong luc lam bai
-- Chat voi AI theo ngu canh cau hoi hien tai
-- Nhan goi y cai thien prompt theo thoi gian thuc
-- Theo doi token su dung
+3. Hỗ trợ AI trong lúc làm bài
+- Chat với AI theo ngữ cảnh câu hỏi hiện tại
+- Nhận gợi ý cải thiện prompt theo thời gian thực
+- Theo dõi token sử dụng
 
-4. Xem ket qua
+4. Xem kết quả
 - Xem Content Score, AI Skill Score, Final Score
-- Xem feedback tu he thong va giang vien
-- Xem lai bai da nop
+- Xem feedback từ hệ thống và giảng viên
+- Xem lại bài đã nộp
 
-## 4. Logic Danh Gia AI Skill
+## 4. Logic Đánh Giá AI Skill
 
-He thong khong cam AI, ma do chat luong su dung AI.
+Hệ thống không cấm AI, mà đánh giá chất lượng sử dụng AI.
 
-Cac thanh phan chinh:
+Các thành phần chính:
 
 1. Prompt quality
-- Do ro muc tieu
-- Co context hay khong
-- Do cu the cua cau hoi
-- Phat hien anti-pattern (xin dap an truc tiep, prompt qua mo ho)
+- Độ rõ mục tiêu
+- Có context hay không
+- Độ cụ thể của câu hỏi
+- Phát hiện anti-pattern (xin đáp án trực tiếp, prompt quá mơ hồ)
 
 2. Independence level
-- So lan goi AI tren moi cau hoi
-- Muc do phu thuoc vao AI
+- Số lần gọi AI trên mỗi câu hỏi
+- Mức độ phụ thuộc vào AI
 
 3. Iteration efficiency
-- Ti le prompt trung lap
-- Kha nang refine prompt theo huong tot hon
+- Tỷ lệ prompt trùng lặp
+- Khả năng refine prompt theo hướng tốt hơn
 
 4. Dependency analysis
-- Phat hien cac mau le thuoc AI
-- Xep muc rui ro: Low, Medium, High, Critical
+- Phát hiện các mẫu lệ thuộc AI
+- Xếp mức rủi ro: Low, Medium, High, Critical
 
 5. WISDOM framework
 - Inquiry
 - Disruptive Thinking
 - Mindfulness
 
-## 5. He Thong API Chinh
+## 5. Hệ Thống API Chính
 
 ### Auth
 - POST /api/auth/student/register
@@ -148,7 +149,7 @@ Cac thanh phan chinh:
 - GET /api/submission/instructor/all
 - GET /api/submission/student/my-submissions
 
-### AI Chat va AI Assessment
+### AI Chat và AI Assessment
 - POST /api/ai/chat
 - GET /api/ai-assessment/submission/:id
 - GET /api/ai-assessment/submission/:id/summary
@@ -159,124 +160,123 @@ Cac thanh phan chinh:
 - GET /api/ai-assessment/submission/:id/rubric
 - GET /api/ai-assessment/submission/:id/warnings
 
-### Logs va Analytics
+### Logs và Analytics
 - GET /api/logs/submission/:submissionId
 - POST /api/logs/label
 - GET /api/logs/export
 - GET /api/analytics/assignment/:id
 - GET /api/analytics/student/:id
 
-## 6. Bao Mat va Van Hanh
+## 6. Bảo Mật và Vận Hành
 
 - Role-based access control (student/instructor)
-- JWT access token ngan han + refresh token httpOnly cookie
+- JWT access token ngắn hạn + refresh token httpOnly cookie
 - Helmet security headers
-- Rate limiting cho API va AI chat
-- Validate file upload va gioi han dung luong
+- Rate limiting cho API và AI chat
+- Validate file upload và giới hạn dung lượng
 - CORS control theo environment
-- Logging + telemetry voi Application Insights
+- Logging + telemetry với Application Insights
 
-## 7. Testing va Chat Luong Code
+## 7. Testing và Chất Lượng Code
 
 - Backend test: Jest + Supertest + mongodb-memory-server
 - Frontend test: Vitest + React Testing Library
 - Lint/format: ESLint + Prettier
-- Coverage threshold duoc khai bao trong backend package config
+- Coverage threshold được khai báo trong backend package config
 
-Muc tieu test:
+Mục tiêu test:
 - Auth flow
 - Assignment flow
 - Submission flow
 - AI chat logic
-- Analytics va logs
+- Analytics và logs
 - Utility modules (grading, parser, ai assessment)
 
-## 8. Cau Truc Thu Muc Chinh
+## 8. Cấu Trúc Thư Mục Chính
 
 - backend/src/routes: API routes
 - backend/src/models: Mongoose models
 - backend/src/middleware: auth, security, upload, error handling
 - backend/src/utils: document parser, question generator, grading, AI assessment
-- frontend/src/pages: pages cho instructor va student
+- frontend/src/pages: pages cho instructor và student
 - frontend/src/components: reusable UI components
-- frontend/src/contexts: auth va assignment context
-- frontend/src/utils: API client va helpers
+- frontend/src/contexts: auth và assignment context
+- frontend/src/utils: API client và helpers
 
-## 9. Huong Dan Chay Local
+## 9. Hướng Dẫn Chạy Local
 
-Yeu cau:
+Yêu cầu:
 - Node.js 18+
 - npm 9+
 - MongoDB URI
-- OpenAI API key hoac Azure OpenAI credentials
+- OpenAI API key hoặc Azure OpenAI credentials
 
-Cac buoc:
+Các bước:
 
-1. Cai dependencies
-- o root: npm run install:all
+1. Cài dependencies
+- Ở root: npm run install:all
 
-2. Cau hinh backend environment
-- Tao file backend/.env
-- Dien cac bien toi thieu:
+2. Cấu hình backend environment
+- Tạo file backend/.env
+- Điền các biến tối thiểu:
 	- MONGODB_URI
 	- OPENAI_API_KEY
 	- JWT_SECRET
 	- FRONTEND_URL
 
-3. Chay he thong
-- root: npm run dev
-- frontend: http://localhost:5173
-- backend: http://localhost:5000
+3. Chạy hệ thống
+- Root: npm run dev
+- Frontend: http://localhost:5173
+- Backend: http://localhost:5000
 
-## 10. Dinh Huong Mo Rong
+## 10. Định Hướng Mở Rộng
 
 - LMS integration (Moodle, Canvas, Google Classroom)
-- SSO voi he thong truong
-- AI grading nang cao cho essay
+- SSO với hệ thống trường
+- AI grading nâng cao cho essay
 - Prompt suggestion engine
-- Phat hien nguy co hoc tap som dua tren pattern su dung AI
+- Phát hiện nguy cơ học tập sớm dựa trên pattern sử dụng AI
 
-## 11. Thong Tin Danh Cho Nha Tuyen Dung
+## 11. Thông Tin Dành Cho Nhà Tuyển Dụng
 
-Du an the hien kha nang full-stack va AI integration trong bai toan giao duc thuc te:
+Dự án thể hiện khả năng full-stack và AI integration trong bài toán giáo dục thực tế:
 
-- Phan tich nghiep vu va thiet ke luong du lieu end-to-end
-- Xay dung REST API co phan quyen va security best practices
-- Tich hop mo hinh AI vao product workflow, khong chi demo chatbot
-- Thiet ke he thong scoring co logic danh gia hanh vi su dung AI
-- To chuc codebase monorepo, co test, lint, monitoring
+- Phân tích nghiệp vụ và thiết kế luồng dữ liệu end-to-end
+- Xây dựng REST API có phân quyền và security best practices
+- Tích hợp mô hình AI vào product workflow, không chỉ demo chatbot
+- Thiết kế hệ thống scoring có logic đánh giá hành vi sử dụng AI
+- Tổ chức codebase monorepo, có test, lint, monitoring
 
-Neu can ban demo cho doanh nghiep, co the bat dau tu 2 luong chinh:
-- Instructor: tao bai tap bang tai lieu va publish
-- Student: lam bai, chat AI, submit, xem bao cao diem va AI skill
+Nếu cần demo cho doanh nghiệp, có thể bắt đầu từ 2 luồng chính:
+- Instructor: tạo bài tập bằng tài liệu và publish
+- Student: làm bài, chat AI, submit, xem báo cáo điểm và AI skill
+
+## 12. Troubleshooting
 
 ### OpenAI API lỗi
 
-- Verify `OPENAI_API_KEY` hợp lệ
+- Verify OPENAI_API_KEY hợp lệ
 - Kiểm tra billing account có đủ credits
-- Test API key: `curl https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"`
+- Test API key:
+	curl https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"
 
 ### File upload không hoạt động
 
-- Kiểm tra `AZURE_STORAGE_CONNECTION_STRING`
-- Verify container 'assignment-documents' đã được tạo
+- Kiểm tra AZURE_STORAGE_CONNECTION_STRING
+- Verify container assignment-documents đã được tạo
 - Kiểm tra file size limit (mặc định 10MB)
 
-## 📚 Tài Liệu Thêm
+## 13. Tài Liệu Thêm
 
-- Xem `.github/copilot-instructions.md` để hiểu rõ architecture và data flow
-- API Documentation: (sẽ thêm Swagger/OpenAPI)
-- Database Schema: Xem `backend/models/`
+- Xem .github/copilot-instructions.md để hiểu rõ architecture và data flow
+- API documentation: sẽ bổ sung Swagger/OpenAPI
+- Database schema: xem backend/src/models
 
-## 🤝 Contributing
-
-(Thêm hướng dẫn contribute nếu là project mở)
-
-## 📄 License
+## 14. License
 
 ISC License
 
-## 👥 Team
+## 15. Team
 
 - Developer: Hồ Đình Tiến Nghĩa
 
