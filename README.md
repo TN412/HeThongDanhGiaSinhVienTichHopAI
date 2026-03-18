@@ -1,4 +1,4 @@
-# AI-Integrated Student Assessment System
+# Hệ Thống Đánh Giá Sinh Viên Tích Hợp AI (AI-Integrated Student Assessment System)
 
 He thong tao bai tap va danh gia nang luc sinh vien tich hop AI cho dai hoc/cao dang. Du an danh gia dong thoi 2 khia canh:
 
